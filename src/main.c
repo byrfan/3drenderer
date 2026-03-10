@@ -1,25 +1,13 @@
-#include "raylib.h"
 // implementation gui
+#include "render.h"
+#include <SDL2/SDL.h>
 
-int main()
-{
-    const int sw = 800;
-    const int sh = 450;
+int main(void) {
+    SDL_Renderer* renderer;
+    SDL_Window* window;
+    SDL_Event event;
 
-    InitWindow(sw, sh, "3drenderer");
-    SetTargetFPS(60);
-
-    while (!WindowShouldClose())
-    {
-        BeginDrawing();
-
-            ClearBackground(RAYWHITE);
-
-            DrawText("window", 190, 200, 20, LIGHTGRAY);
-        EndDrawing();
-    }
-
-    CloseWindow();
+    Run_Window();
 
     return 0;
 }

@@ -16,22 +16,22 @@ typedef struct {
         if (arr == NULL) { \
             Header* header = malloc(sizeof(*arr)*ARR_INIT_CAP + sizeof(Header)); \
             header->count = 0; \
-            header->capacity = ARR_INIT_CAP; \ 
+            header->capacity = ARR_INIT_CAP; \
             arr = (void*)(header + 1); \
-        } \ 
+        } \
         Header* header = (Header*)(arr) - 1; \
-        if (header->count >= header->capacity) { \ 
-            size_t new_cap = header->capacity *= 2; \ 
+        if (header->count >= header->capacity) { \
+            size_t new_cap = header->capacity *= 2; \
             void* tmp = realloc(header, sizeof(*arr) * new_cap + sizeof(Header)); \
             if (tmp) { \
                 header = (Header*)tmp; \
                 header->capacity = new_cap; \
                 arr = (void*)(header + 1); \
             } \
-            arr = (void*)(header + 1); \ 
-        } \ 
-        (arr)[header->count++] = (x); \ 
-    } while (0) 
+            arr = (void*)(header + 1); \
+        } \
+        (arr)[header->count++] = (x); \
+    } while (0)
 
 #define arr_len(arr) ((Header*)(arr) - 1)->count
 

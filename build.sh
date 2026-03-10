@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 CC="gcc"
-flags="-lraylib"
+sdl_flags=$(pkg-config --cflags --libs sdl2)
+flags="-lm"
 src="./src"
 bld="./build"
 exe="app"
@@ -13,7 +14,7 @@ for file in "$src"/*.c; do
 done
 
 echo "Linking..."
-$CC "$bld/src"/*.o -o "$bld/$exe" $flags
+$CC "$bld/src"/*.o -o "$bld/$exe" $sdl_flags $flags
 
 echo "Do: 
 $bld/$exe"
