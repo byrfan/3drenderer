@@ -1,11 +1,22 @@
 #include "mesh.h"
-#include "render.h"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_render.h>
-#include <math.h>
+#include "dynarr.h"
 
-#define WIDTH 800
-#define HEIGHT 600
+#include <SDL2/SDL.h>
+#include <math.h>
+#include <stdio.h>
+
+#define WIDTH 1280
+#define HEIGHT 720
+
+// -----------------------------------------------------------------
+// Data structures
+// -----------------------------------------------------------------
+
+typedef struct {
+    float x, y, z;          // camera position
+    float pitch, yaw;       // rotation (radians)
+    float focal_length;     // for perspective projection
+} Camera;
 
 // Global camera instance
 static Camera camera = {
@@ -17,125 +28,93 @@ static Camera camera = {
     .focal_length = 500
 };
 
-// Transform world point to camera space
-static void transform_to_camera(float world_x, float world_y, float world_z, 
+// Depth buffer – one float per pixel
+static float depth_buffer[WIDTH * HEIGHT];
+
+// Helper macros
+#ifndef min
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#endif
+#ifndef max
+#define max(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
+// -----------------------------------------------------------------
+// Camera transformations
+// -----------------------------------------------------------------
+static void transform_to_camera(float world_x, float world_y, float world_z,
                                 float* cam_x_out, float* cam_y_out, float* cam_z_out) {
     // Translate world to camera space
     float tx = world_x - camera.x;
     float ty = world_y - camera.y;
     float tz = world_z - camera.z;
-    
+
     // Rotate by yaw (around Y axis)
     float rotated_x = tx * cos(camera.yaw) - tz * sin(camera.yaw);
     float rotated_z = tx * sin(camera.yaw) + tz * cos(camera.yaw);
     float rotated_y = ty;
-    
+
     // Rotate by pitch (around X axis)
     float final_y = rotated_y * cos(camera.pitch) - rotated_z * sin(camera.pitch);
     float final_z = rotated_y * sin(camera.pitch) + rotated_z * cos(camera.pitch);
     float final_x = rotated_x;
-    
+
     *cam_x_out = final_x;
     *cam_y_out = final_y;
     *cam_z_out = final_z;
 }
 
-// Project camera space point to screen
-static int project_to_screen(float cam_x, float cam_y, float cam_z, 
+static int project_to_screen(float cam_x, float cam_y, float cam_z,
                              int* screen_x, int* screen_y) {
-    if (cam_z <= 0) return 0;  // Behind camera
-    
+    if (cam_z <= 0) return 0;   // behind camera
+
     float projected_x = (cam_x * camera.focal_length) / cam_z;
     float projected_y = (cam_y * camera.focal_length) / cam_z;
-    
+
     *screen_x = (int)(projected_x + WIDTH / 2);
     *screen_y = (int)(HEIGHT / 2 - projected_y);
-    
-    return (*screen_x >= 0 && *screen_x < WIDTH && 
+
+    return (*screen_x >= 0 && *screen_x < WIDTH &&
             *screen_y >= 0 && *screen_y < HEIGHT);
 }
 
-// Plot a point in world coordinates using camera
-void plot_point(SDL_Renderer* renderer, float x, float y, float z) {
-    float cam_space_x, cam_space_y, cam_space_z;
-    transform_to_camera(x, y, z, &cam_space_x, &cam_space_y, &cam_space_z);
-    
-    int screen_x, screen_y;
-    if (project_to_screen(cam_space_x, cam_space_y, cam_space_z, &screen_x, &screen_y)) {
-        SDL_RenderDrawPoint(renderer, screen_x, screen_y);
-    }
-}
-
-// draw a vertex
-void Draw_Vertex(SDL_Renderer *renderer, Vertex* v) {
-    plot_point(renderer, v->x, v->y, v->z);
-}
-
-//draw a line between two points (vertices)
-void Draw_Line(SDL_Renderer *renderer, Vertex* v1, Vertex* v2) {
-    float steps = 50;
-    for (int i = 0; i <= steps; i++) {
-        float t = i / steps;
-        float x = v1->x + t * (v2->x - v1->x);
-        float y = v1->y + t * (v2->y - v1->y);
-        float z = v1->z + t * (v2->z - v1->z);
-        plot_point(renderer, x, y, z);
-    }
-}
-
-// boilerplate for a cube
-void Draw_Cube(SDL_Renderer *renderer, Vertex* vertices) {
-    int edges[12][2] = {
-        {0,1}, {1,2}, {2,3}, {3,0},
-        {4,5}, {5,6}, {6,7}, {7,4},
-        {0,4}, {1,5}, {2,6}, {3,7}
-    };
-    
-    for (int i = 0; i < 12; i++) {
-        Draw_Line(renderer, &vertices[edges[i][0]], &vertices[edges[i][1]]);
-    }
-}
-
-// teleport camera
+// -----------------------------------------------------------------
+// Camera control API
+// -----------------------------------------------------------------
 void Camera_SetPosition(float x, float y, float z) {
     camera.x = x;
     camera.y = y;
     camera.z = z;
 }
 
-// set viewport
 void Camera_SetRotation(float pitch, float yaw) {
     camera.pitch = pitch;
     camera.yaw = yaw;
 }
 
-// move the camera through space
 void Camera_Move(float forward, float right, float up) {
     camera.x += forward * sin(camera.yaw);
     camera.z += forward * cos(camera.yaw);
-    
+
     camera.x += right * cos(camera.yaw);
     camera.z += right * -sin(camera.yaw);
-    
+
     camera.y += up;
 }
 
-// rotate the screen viewport
 void Camera_Rotate(float pitch_delta, float yaw_delta) {
     camera.pitch += pitch_delta;
     camera.yaw += yaw_delta;
-    
+
     // Clamp pitch to avoid flipping
     if (camera.pitch > 1.5f) camera.pitch = 1.5f;
     if (camera.pitch < -1.5f) camera.pitch = -1.5f;
 }
 
-// change focal length / i.e. zooming
 void Camera_SetFocalLength(float focal_length) {
     camera.focal_length = focal_length;
 }
 
-// Take an instance of the camera
 void Camera_GetInfo(Camera* out_camera) {
     *out_camera = camera;
 }
@@ -175,54 +154,236 @@ int Camera_Controls(const Uint8* keyboard_state) {
         Camera_Rotate(-rotate_speed, 0); // Look down
     }
     if (keyboard_state[SDL_SCANCODE_ESCAPE]) {
+        return 0;  // signal to quit
+    }
+    return 1;  // continue running
+}
+
+// -----------------------------------------------------------------
+// Low‑level drawing (wireframe helpers)
+// -----------------------------------------------------------------
+void plot_point(SDL_Renderer* renderer, float x, float y, float z) {
+    float cam_x, cam_y, cam_z;
+    transform_to_camera(x, y, z, &cam_x, &cam_y, &cam_z);
+
+    int sx, sy;
+    if (project_to_screen(cam_x, cam_y, cam_z, &sx, &sy)) {
+        SDL_RenderDrawPoint(renderer, sx, sy);
+    }
+}
+
+void Draw_Line(SDL_Renderer *renderer, Vertex* v1, Vertex* v2) {
+    float steps = 50;
+    for (int i = 0; i <= steps; i++) {
+        float t = i / steps;
+        float x = v1->x + t * (v2->x - v1->x);
+        float y = v1->y + t * (v2->y - v1->y);
+        float z = v1->z + t * (v2->z - v1->z);
+        plot_point(renderer, x, y, z);
+    }
+}
+
+// -----------------------------------------------------------------
+// Triangle rasterization (filled)
+// -----------------------------------------------------------------
+static int edge_function(int x1, int y1, int x2, int y2, int x, int y) {
+    return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
+}
+
+void draw_triangle(SDL_Renderer* renderer, Vertex* v1, Vertex* v2, Vertex* v3,
+                   Uint8 r, Uint8 g, Uint8 b) {
+    // Transform vertices to camera space and then to screen
+    float cam1x, cam1y, cam1z, cam2x, cam2y, cam2z, cam3x, cam3y, cam3z;
+    transform_to_camera(v1->x, v1->y, v1->z, &cam1x, &cam1y, &cam1z);
+    transform_to_camera(v2->x, v2->y, v2->z, &cam2x, &cam2y, &cam2z);
+    transform_to_camera(v3->x, v3->y, v3->z, &cam3x, &cam3y, &cam3z);
+
+    int sx1, sy1, sx2, sy2, sx3, sy3;
+    if (!project_to_screen(cam1x, cam1y, cam1z, &sx1, &sy1)) return;
+    if (!project_to_screen(cam2x, cam2y, cam2z, &sx2, &sy2)) return;
+    if (!project_to_screen(cam3x, cam3y, cam3z, &sx3, &sy3)) return;
+
+    // 2D bounding box
+    int min_x = min(sx1, min(sx2, sx3));
+    int max_x = max(sx1, max(sx2, sx3));
+    int min_y = min(sy1, min(sy2, sy3));
+    int max_y = max(sy1, max(sy2, sy3));
+
+    min_x = max(min_x, 0);
+    max_x = min(max_x, WIDTH - 1);
+    min_y = max(min_y, 0);
+    max_y = min(max_y, HEIGHT - 1);
+
+    // Double area of the triangle (used for barycentric weights)
+    int area2 = edge_function(sx1, sy1, sx2, sy2, sx3, sy3);
+    if (area2 == 0) return;
+
+    // Rasterize
+    for (int y = min_y; y <= max_y; y++) {
+        for (int x = min_x; x <= max_x; x++) {
+            int e0 = edge_function(sx2, sy2, sx3, sy3, x, y);
+            int e1 = edge_function(sx3, sy3, sx1, sy1, x, y);
+            int e2 = edge_function(sx1, sy1, sx2, sy2, x, y);
+
+            // Inside test (same sign as area2)
+            if ((area2 > 0 && e0 >= 0 && e1 >= 0 && e2 >= 0) ||
+                (area2 < 0 && e0 <= 0 && e1 <= 0 && e2 <= 0)) {
+
+                // Barycentric coordinates (normalised)
+                float w0 = (float)e0 / area2;
+                float w1 = (float)e1 / area2;
+                float w2 = (float)e2 / area2;
+
+                // Interpolate depth (camera Z) – linear in screen space
+                float z = w0 * cam1z + w1 * cam2z + w2 * cam3z;
+
+                int idx = y * WIDTH + x;
+                if (z < depth_buffer[idx]) {
+                    depth_buffer[idx] = z;
+                    SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                    SDL_RenderDrawPoint(renderer, x, y);
+                }
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------
+// Cube creation and drawing
+// -----------------------------------------------------------------
+void Init_Cube(Vertex *cube_vertices) {
+    Vertex temp[8] = {
+        {-50, -50, 0}, {50, -50, 0}, {50, 50, 0}, {-50, 50, 0},   // back face (z=0)
+        {-50, -50, 100}, {50, -50, 100}, {50, 50, 100}, {-50, 50, 100} // front face (z=100)
+    };
+    for (int i = 0; i < 8; i++) cube_vertices[i] = temp[i];
+}
+
+void Draw_Cube(SDL_Renderer *renderer, Vertex* vertices) {
+    // 12 triangles (2 per face), with correct winding for outward normals
+    int triangles[12][3] = {
+        // front face (z=100) – vertices 4,5,6,7
+        {4,5,6}, {4,6,7},
+        // back face (z=0) – vertices 0,1,2,3
+        {0,2,1}, {0,3,2},
+        // top face (y=50) – vertices 3,2,6,7
+        {3,2,6}, {3,6,7},
+        // bottom face (y=-50) – vertices 0,1,5,4
+        {0,1,5}, {0,5,4},
+        // right face (x=50) – vertices 1,2,6,5
+        {1,2,6}, {1,6,5},
+        // left face (x=-50) – vertices 0,4,7,3
+        {0,4,7}, {0,7,3}
+    };
+
+    // Per‑face colors
+    Uint8 colors[6][3] = {
+        {255, 0, 0},   // front - red
+        {0, 255, 0},   // back - green
+        {0, 0, 255},   // top - blue
+        {255, 255, 0}, // bottom - yellow
+        {255, 0, 255}, // right - magenta
+        {0, 255, 255}  // left - cyan
+    };
+
+    for (int i = 0; i < 12; i++) {
+        int face = i / 2;
+        draw_triangle(renderer,
+                      &vertices[triangles[i][0]],
+                      &vertices[triangles[i][1]],
+                      &vertices[triangles[i][2]],
+                      colors[face][0],
+                      colors[face][1],
+                      colors[face][2]);
+    }
+
+    // Optional white wireframe overlay (uncomment if desired)
+    /*
+    int edges[12][2] = {
+        {0,1},{1,2},{2,3},{3,0},
+        {4,5},{5,6},{6,7},{7,4},
+        {0,4},{1,5},{2,6},{3,7}
+    };
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    for (int i = 0; i < 12; i++) {
+        Draw_Line(renderer, &vertices[edges[i][0]], &vertices[edges[i][1]]);
+    }
+    */
+}
+
+// -----------------------------------------------------------------
+// SDL initialisation and main loop
+// -----------------------------------------------------------------
+int Init_Window(SDL_Window **window, SDL_Renderer **renderer) {
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        return 0;
+    }
+    if (SDL_CreateWindowAndRenderer(WIDTH, HEIGHT, 0, window, renderer) < 0) {
+        SDL_Quit();
         return 0;
     }
     return 1;
 }
 
-void Run_Window() {
+int Handle_Events() {
     SDL_Event event;
-    SDL_Renderer *renderer;
-    SDL_Window *window;
-
-    SDL_Init(SDL_INIT_VIDEO);
-    SDL_CreateWindowAndRenderer(WIDTH, HEIGHT, 0, &window, &renderer);
-    
-    Camera_SetPosition(0, 0, -300);
-    Camera_SetFocalLength(500);
-    
-    Vertex cube_vertices[8] = {
-        {-50, -50, 0}, {50, -50, 0}, {50, 50, 0}, {-50, 50, 0},
-        {-50, -50, 100}, {50, -50, 100}, {50, 50, 100}, {-50, 50, 100}
-    };
-    
-    float time = 0;
-    int running = 1;
-    const Uint8* keyboard_state = SDL_GetKeyboardState(NULL);
-    
-    while (running) {
-        // Handle events (for quit)
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_QUIT) {
-                running = 0;
-            }
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+            return 0;
         }
-        
-        running = Camera_Controls(keyboard_state); 
+    }
+    return 1;
+}
 
-        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        SDL_RenderClear(renderer);
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        
-        Draw_Cube(renderer, cube_vertices);
-        
-        SDL_RenderPresent(renderer);
-        
-        time += 0.01f;
-        SDL_Delay(16);
+void Render_Frame(SDL_Renderer *renderer, Vertex *cube_vertices) {
+    // Clear colour buffer
+    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+    SDL_RenderClear(renderer);
+
+    // Clear depth buffer
+    for (int i = 0; i < WIDTH * HEIGHT; i++) {
+        depth_buffer[i] = 1e10f;
     }
 
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
+    // Draw the solid cube
+    Draw_Cube(renderer, cube_vertices);
+
+    SDL_RenderPresent(renderer);
+}
+
+void Cleanup(SDL_Window *window, SDL_Renderer *renderer) {
+    if (renderer) SDL_DestroyRenderer(renderer);
+    if (window) SDL_DestroyWindow(window);
     SDL_Quit();
+}
+
+void Run_Window() {
+    SDL_Renderer *renderer = NULL;
+    SDL_Window *window = NULL;
+    Vertex cube_vertices[8];
+
+    if (!Init_Window(&window, &renderer)) {
+        printf("Failed to initialise SDL!\n");
+        return;
+    }
+
+    // Setup scene
+    Camera_SetPosition(0, 0, -300);
+    Camera_SetFocalLength(500);
+    Init_Cube(cube_vertices);
+
+    const Uint8* keyboard_state = SDL_GetKeyboardState(NULL);
+    int running = 1;
+
+    while (running) {
+        if (!Handle_Events()) {
+            running = 0;
+            break;
+        }
+        running = Camera_Controls(keyboard_state);
+        Render_Frame(renderer, cube_vertices);
+        SDL_Delay(16);  // ~60 FPS
+    }
+
+    Cleanup(window, renderer);
 }
