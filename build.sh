@@ -10,7 +10,7 @@ mkdir -p "$bld/src/"
 
 echo "Compiling..."
 for file in "$src"/*.c; do
-  $CC $flags -c "$file" -o "$bld/src/$(basename "$file" .c).o"
+  $CC $flags -c "$file" -g -o "$bld/src/$(basename "$file" .c).o"
 done
 
 echo "Linking..."

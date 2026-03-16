@@ -209,7 +209,7 @@ void draw_triangle(SDL_Renderer* renderer, Vertex* v1, Vertex* v2, Vertex* v3,
     int min_y = min(sy1, min(sy2, sy3));
     int max_y = max(sy1, max(sy2, sy3));
 
-    min_x = max(min_x, 0);
+    min_x = max(min_x, 0) ;
     max_x = min(max_x, WIDTH - 1);
     min_y = max(min_y, 0);
     max_y = min(max_y, HEIGHT - 1);
@@ -297,7 +297,6 @@ void Draw_Cube(SDL_Renderer *renderer, Vertex* vertices) {
                       colors[face][2]);
     }
 
-    // Optional white wireframe overlay (uncomment if desired)
     /*
     int edges[12][2] = {
         {0,1},{1,2},{2,3},{3,0},
@@ -335,7 +334,7 @@ int Handle_Events() {
     return 1;
 }
 
-void Render_Frame(SDL_Renderer *renderer, Vertex *cube_vertices) {
+void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
     // Clear colour buffer
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -345,8 +344,34 @@ void Render_Frame(SDL_Renderer *renderer, Vertex *cube_vertices) {
         depth_buffer[i] = 1e10f;
     }
 
-    // Draw the solid cube
-    Draw_Cube(renderer, cube_vertices);
+    // Draw the mesh
+    if (mesh && mesh->vertices && mesh->indices) {
+        size_t num_indices = arr_len(mesh->indices);
+        size_t num_triangles = num_indices / 3;
+
+        // Choose a colour for the whole mesh (e.g., light gray)
+        Uint8 r = 200, g = 200, b = 200;
+
+        for (size_t i = 0; i < num_triangles; i++) {
+            size_t idx0 = mesh->indices[i * 3 + 0];
+            size_t idx1 = mesh->indices[i * 3 + 1];
+            size_t idx2 = mesh->indices[i * 3 + 2];
+
+            // Optional: add bounds checking
+            if (idx0 >= arr_len(mesh->vertices) ||
+                idx1 >= arr_len(mesh->vertices) ||
+                idx2 >= arr_len(mesh->vertices)) {
+                fprintf(stderr, "Warning: index out of bounds in triangle %zu\n", i);
+                continue;
+            }
+
+            draw_triangle(renderer,
+                          &mesh->vertices[idx0],
+                          &mesh->vertices[idx1],
+                          &mesh->vertices[idx2],
+                          r, g, b);
+        }
+    }
 
     SDL_RenderPresent(renderer);
 }
@@ -360,17 +385,37 @@ void Cleanup(SDL_Window *window, SDL_Renderer *renderer) {
 void Run_Window() {
     SDL_Renderer *renderer = NULL;
     SDL_Window *window = NULL;
-    Vertex cube_vertices[8];
 
     if (!Init_Window(&window, &renderer)) {
         printf("Failed to initialise SDL!\n");
         return;
     }
 
-    // Setup scene
+    // Load the mesh from an OBJ file
+    Mesh mesh;
+    mesh_init(&mesh);
+
+    const char* filename = "pyramid.obj";  
+    if (mesh_load_obj(&mesh, filename) != 0) {
+        fprintf(stderr, "Failed to load mesh from %s\n", filename);
+        Cleanup(window, renderer);
+        return;
+    }
+
+    printf("Loaded %zu vertices, %zu indices (%zu triangles)\n",
+           arr_len(mesh.vertices), arr_len(mesh.indices),
+           arr_len(mesh.indices) / 3);
+    
+    float scale = 20;
+    for (size_t i = 0; i < arr_len(mesh.vertices); i++) {
+        mesh.vertices[i].x *= scale;
+        mesh.vertices[i].y *= scale;
+        mesh.vertices[i].z *= scale;
+    }
+
+    // Setup camera (optional, adjust as needed)
     Camera_SetPosition(0, 0, -300);
     Camera_SetFocalLength(500);
-    Init_Cube(cube_vertices);
 
     const Uint8* keyboard_state = SDL_GetKeyboardState(NULL);
     int running = 1;
@@ -381,9 +426,11 @@ void Run_Window() {
             break;
         }
         running = Camera_Controls(keyboard_state);
-        Render_Frame(renderer, cube_vertices);
+        Render_Frame(renderer, &mesh);
         SDL_Delay(16);  // ~60 FPS
     }
 
+    // Clean up mesh and SDL
+    mesh_free(&mesh);
     Cleanup(window, renderer);
 }
