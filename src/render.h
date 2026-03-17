@@ -5,9 +5,6 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
 
-#define WIDTH 800
-#define HEIGHT 600
-
 typedef struct {
     float x;
     float y;

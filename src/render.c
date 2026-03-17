@@ -190,13 +190,12 @@ static int edge_function(int x1, int y1, int x2, int y2, int x, int y) {
     return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
 }
 
-void draw_triangle(SDL_Renderer* renderer, Vertex* v1, Vertex* v2, Vertex* v3,
-                   Uint8 r, Uint8 g, Uint8 b) {
-    // Transform vertices to camera space and then to screen
-    float cam1x, cam1y, cam1z, cam2x, cam2y, cam2z, cam3x, cam3y, cam3z;
-    transform_to_camera(v1->x, v1->y, v1->z, &cam1x, &cam1y, &cam1z);
-    transform_to_camera(v2->x, v2->y, v2->z, &cam2x, &cam2y, &cam2z);
-    transform_to_camera(v3->x, v3->y, v3->z, &cam3x, &cam3y, &cam3z);
+void draw_triangle(SDL_Renderer* renderer,
+                    float cam1x, float cam1y, float cam1z, 
+                    float cam2x, float cam2y, float cam2z, 
+                    float cam3x, float cam3y, float cam3z,
+                    Uint8 r, Uint8 g, Uint8 b) {
+
 
     int sx1, sy1, sx2, sy2, sx3, sy3;
     if (!project_to_screen(cam1x, cam1y, cam1z, &sx1, &sy1)) return;
@@ -249,68 +248,6 @@ void draw_triangle(SDL_Renderer* renderer, Vertex* v1, Vertex* v2, Vertex* v3,
 }
 
 // -----------------------------------------------------------------
-// Cube creation and drawing
-// -----------------------------------------------------------------
-void Init_Cube(Vertex *cube_vertices) {
-    Vertex temp[8] = {
-        {-50, -50, 0}, {50, -50, 0}, {50, 50, 0}, {-50, 50, 0},   // back face (z=0)
-        {-50, -50, 100}, {50, -50, 100}, {50, 50, 100}, {-50, 50, 100} // front face (z=100)
-    };
-    for (int i = 0; i < 8; i++) cube_vertices[i] = temp[i];
-}
-
-void Draw_Cube(SDL_Renderer *renderer, Vertex* vertices) {
-    // 12 triangles (2 per face), with correct winding for outward normals
-    int triangles[12][3] = {
-        // front face (z=100) – vertices 4,5,6,7
-        {4,5,6}, {4,6,7},
-        // back face (z=0) – vertices 0,1,2,3
-        {0,2,1}, {0,3,2},
-        // top face (y=50) – vertices 3,2,6,7
-        {3,2,6}, {3,6,7},
-        // bottom face (y=-50) – vertices 0,1,5,4
-        {0,1,5}, {0,5,4},
-        // right face (x=50) – vertices 1,2,6,5
-        {1,2,6}, {1,6,5},
-        // left face (x=-50) – vertices 0,4,7,3
-        {0,4,7}, {0,7,3}
-    };
-
-    // Per‑face colors
-    Uint8 colors[6][3] = {
-        {255, 0, 0},   // front - red
-        {0, 255, 0},   // back - green
-        {0, 0, 255},   // top - blue
-        {255, 255, 0}, // bottom - yellow
-        {255, 0, 255}, // right - magenta
-        {0, 255, 255}  // left - cyan
-    };
-
-    for (int i = 0; i < 12; i++) {
-        int face = i / 2;
-        draw_triangle(renderer,
-                      &vertices[triangles[i][0]],
-                      &vertices[triangles[i][1]],
-                      &vertices[triangles[i][2]],
-                      colors[face][0],
-                      colors[face][1],
-                      colors[face][2]);
-    }
-
-    /*
-    int edges[12][2] = {
-        {0,1},{1,2},{2,3},{3,0},
-        {4,5},{5,6},{6,7},{7,4},
-        {0,4},{1,5},{2,6},{3,7}
-    };
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    for (int i = 0; i < 12; i++) {
-        Draw_Line(renderer, &vertices[edges[i][0]], &vertices[edges[i][1]]);
-    }
-    */
-}
-
-// -----------------------------------------------------------------
 // SDL initialisation and main loop
 // -----------------------------------------------------------------
 int Init_Window(SDL_Window **window, SDL_Renderer **renderer) {
@@ -347,6 +284,19 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
     // Draw the mesh
     if (mesh && mesh->vertices && mesh->indices) {
         size_t num_indices = arr_len(mesh->indices);
+        /*
+        TransformedVertex *tv = malloc(num_vertices * sizeof(TransformedVertex));
+
+        // Transform and project all vertices
+        for (size_t i = 0; i < num_vertices; i++) {
+            // Transform to camera space
+            transform_to_camera(mesh->vertices[i].x, mesh->vertices[i].y, mesh->vertices[i].z,
+                                &tv[i].cam_x, &tv[i].cam_y, &tv[i].cam_z);
+            // Project to screen
+            project_to_screen(tv[i].cam_x, tv[i].cam_y, tv[i].cam_z,
+                              &tv[i].sx, &tv[i].sy);
+        }
+        */
         size_t num_triangles = num_indices / 3;
 
         // Choose a colour for the whole mesh (e.g., light gray)
@@ -364,12 +314,30 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
                 fprintf(stderr, "Warning: index out of bounds in triangle %zu\n", i);
                 continue;
             }
+            /*
+            float cam1x, cam1y, cam1z, cam2x, cam2y, cam2z, cam3x, cam3y, cam3z;
+            transform_to_camera(v1->x, v1->y, v1->z, &cam1x, &cam1y, &cam1z);
+            transform_to_camera(v2->x, v2->y, v2->z, &cam2x, &cam2y, &cam2z);
+            transform_to_camera(v3->x, v3->y, v3->z, &cam3x, &cam3y, &cam3z);
+            */
+             
+            float cam1x, cam1y, cam1z, cam2x, cam2y, cam2z, cam3x, cam3y, cam3z;
+            Vertex *v1, *v2, *v3;
+            v1 = &mesh->vertices[idx0];
+            v2 = &mesh->vertices[idx1];
+            v3 = &mesh->vertices[idx2];
+
+            transform_to_camera(v1->x, v1->y, v1->z, &cam1x, &cam1y, &cam1z);
+            transform_to_camera(v2->x, v2->y, v2->z, &cam2x, &cam2y, &cam2z);
+            transform_to_camera(v3->x, v3->y, v3->z, &cam3x, &cam3y, &cam3z);
+
 
             draw_triangle(renderer,
-                          &mesh->vertices[idx0],
-                          &mesh->vertices[idx1],
-                          &mesh->vertices[idx2],
-                          r, g, b);
+                     cam1x,  cam1y,  cam1z, 
+                     cam2x,  cam2y,  cam2z, 
+                     cam3x,  cam3y,  cam3z,
+                     r,      g,      b
+            );
         }
     }
 
@@ -395,7 +363,7 @@ void Run_Window() {
     Mesh mesh;
     mesh_init(&mesh);
 
-    const char* filename = "pyramid.obj";  
+    const char* filename = "Car.obj";  
     if (mesh_load_obj(&mesh, filename) != 0) {
         fprintf(stderr, "Failed to load mesh from %s\n", filename);
         Cleanup(window, renderer);
