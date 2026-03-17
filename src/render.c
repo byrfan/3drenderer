@@ -190,18 +190,21 @@ static int edge_function(int x1, int y1, int x2, int y2, int x, int y) {
     return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
 }
 
-void draw_triangle(SDL_Renderer* renderer,
-                    float cam1x, float cam1y, float cam1z, 
-                    float cam2x, float cam2y, float cam2z, 
-                    float cam3x, float cam3y, float cam3z,
-                    Uint8 r, Uint8 g, Uint8 b) {
+void draw_triangle_projected(SDL_Renderer* renderer,
+                             TransformedVertex* tv1,
+                             TransformedVertex* tv2,
+                             TransformedVertex* tv3,
+                             Uint8 r, Uint8 g, Uint8 b) {
+    int sx1 = tv1->sx, sy1 = tv1->sy;
+    int sx2 = tv2->sx, sy2 = tv2->sy;
+    int sx3 = tv3->sx, sy3 = tv3->sy;
 
+    float cam1z = tv1->cam_z;
+    float cam2z = tv2->cam_z;
+    float cam3z = tv3->cam_z;
 
-    int sx1, sy1, sx2, sy2, sx3, sy3;
-    if (!project_to_screen(cam1x, cam1y, cam1z, &sx1, &sy1)) return;
-    if (!project_to_screen(cam2x, cam2y, cam2z, &sx2, &sy2)) return;
-    if (!project_to_screen(cam3x, cam3y, cam3z, &sx3, &sy3)) return;
-
+    // Now rasterize exactly as before, using sx1,sy1,... and cam1z,...
+    // (no projection calls inside)
     // 2D bounding box
     int min_x = min(sx1, min(sx2, sx3));
     int max_x = max(sx1, max(sx2, sx3));
@@ -281,65 +284,39 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
         depth_buffer[i] = 1e10f;
     }
 
-    // Draw the mesh
-    if (mesh && mesh->vertices && mesh->indices) {
-        size_t num_indices = arr_len(mesh->indices);
-        /*
-        TransformedVertex *tv = malloc(num_vertices * sizeof(TransformedVertex));
-
-        // Transform and project all vertices
-        for (size_t i = 0; i < num_vertices; i++) {
-            // Transform to camera space
-            transform_to_camera(mesh->vertices[i].x, mesh->vertices[i].y, mesh->vertices[i].z,
-                                &tv[i].cam_x, &tv[i].cam_y, &tv[i].cam_z);
-            // Project to screen
-            project_to_screen(tv[i].cam_x, tv[i].cam_y, tv[i].cam_z,
-                              &tv[i].sx, &tv[i].sy);
-        }
-        */
-        size_t num_triangles = num_indices / 3;
-
-        // Choose a colour for the whole mesh (e.g., light gray)
-        Uint8 r = 200, g = 200, b = 200;
-
-        for (size_t i = 0; i < num_triangles; i++) {
-            size_t idx0 = mesh->indices[i * 3 + 0];
-            size_t idx1 = mesh->indices[i * 3 + 1];
-            size_t idx2 = mesh->indices[i * 3 + 2];
-
-            // Optional: add bounds checking
-            if (idx0 >= arr_len(mesh->vertices) ||
-                idx1 >= arr_len(mesh->vertices) ||
-                idx2 >= arr_len(mesh->vertices)) {
-                fprintf(stderr, "Warning: index out of bounds in triangle %zu\n", i);
-                continue;
-            }
-            /*
-            float cam1x, cam1y, cam1z, cam2x, cam2y, cam2z, cam3x, cam3y, cam3z;
-            transform_to_camera(v1->x, v1->y, v1->z, &cam1x, &cam1y, &cam1z);
-            transform_to_camera(v2->x, v2->y, v2->z, &cam2x, &cam2y, &cam2z);
-            transform_to_camera(v3->x, v3->y, v3->z, &cam3x, &cam3y, &cam3z);
-            */
-             
-            float cam1x, cam1y, cam1z, cam2x, cam2y, cam2z, cam3x, cam3y, cam3z;
-            Vertex *v1, *v2, *v3;
-            v1 = &mesh->vertices[idx0];
-            v2 = &mesh->vertices[idx1];
-            v3 = &mesh->vertices[idx2];
-
-            transform_to_camera(v1->x, v1->y, v1->z, &cam1x, &cam1y, &cam1z);
-            transform_to_camera(v2->x, v2->y, v2->z, &cam2x, &cam2y, &cam2z);
-            transform_to_camera(v3->x, v3->y, v3->z, &cam3x, &cam3y, &cam3z);
-
-
-            draw_triangle(renderer,
-                     cam1x,  cam1y,  cam1z, 
-                     cam2x,  cam2y,  cam2z, 
-                     cam3x,  cam3y,  cam3z,
-                     r,      g,      b
-            );
-        }
+    size_t num_indices = arr_len(mesh->indices);
+    size_t num_vertices = arr_len(mesh->vertices);
+    TransformedVertex *tv = malloc(num_vertices * sizeof(TransformedVertex));
+    // Transform and project all vertices
+    for (size_t i = 0; i < num_vertices; i++) {
+        // Transform to camera space
+        transform_to_camera(mesh->vertices[i].x, mesh->vertices[i].y, mesh->vertices[i].z,
+                            &tv[i].cam_x, &tv[i].cam_y, &tv[i].cam_z);
+        // Project to screen
+        // TODO
+        // skip rendering triangles that are completely behind another triangle
+        // fix this in project to screen
+        project_to_screen(tv[i].cam_x, tv[i].cam_y, tv[i].cam_z,
+                          &tv[i].sx, &tv[i].sy);
     }
+    
+    // light grey
+    Uint8 r = 200, g = 200, b = 200;
+    for (size_t i = 0; i < num_indices; i += 3) {
+        size_t i0 = mesh->indices[i];
+        size_t i1 = mesh->indices[i+1];
+        size_t i2 = mesh->indices[i+2];
+
+        
+        if (tv[i0].cam_z <= 0 || tv[i1].cam_z <= 0 || tv[i2].cam_z <= 0)
+            continue;
+
+        draw_triangle_projected(renderer,
+                                &tv[i0], &tv[i1], &tv[i2],
+                                r, g, b);
+    }
+
+    free(tv);
 
     SDL_RenderPresent(renderer);
 }

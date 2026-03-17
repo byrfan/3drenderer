@@ -11,6 +11,11 @@ typedef struct {
 } Vertex;
 
 typedef struct {
+    float cam_x, cam_y, cam_z;
+    int sx, sy;
+} TransformedVertex;
+
+typedef struct {
     Vertex* vertices;
     size_t* indices;
 } Mesh;
