@@ -1,23 +1,17 @@
 #include "mesh.h"
 #include "dynarr.h"
+#include "render.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <stdio.h>
 #include <math.h>
 #include <stdio.h>
+#include <time.h>
 
 #define WIDTH 1280
 #define HEIGHT 720
 
-// -----------------------------------------------------------------
-// Data structures
-// -----------------------------------------------------------------
-
-typedef struct {
-    float x, y, z;          // camera position
-    float pitch, yaw;       // rotation (radians)
-    float focal_length;     // for perspective projection
-} Camera;
 
 // Global camera instance
 static Camera camera = {
@@ -275,7 +269,7 @@ int Handle_Events() {
     return 1;
 }
 
-void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
+void Render_Frame(SDL_Renderer *renderer, Mesh *mesh, Colour* colours) {
     // Clear colour buffer
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -300,9 +294,7 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
         project_to_screen(tv[i].cam_x, tv[i].cam_y, tv[i].cam_z,
                           &tv[i].sx, &tv[i].sy);
     }
-    
-    // light grey
-    Uint8 r = 200, g = 200, b = 200;
+    size_t tri_index; 
     for (size_t i = 0; i < num_indices; i += 3) {
         size_t i0 = mesh->indices[i];
         size_t i1 = mesh->indices[i+1];
@@ -311,10 +303,14 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
         
         if (tv[i0].cam_z <= 0 || tv[i1].cam_z <= 0 || tv[i2].cam_z <= 0)
             continue;
+        size_t tri_index = i / 3;
 
         draw_triangle_projected(renderer,
                                 &tv[i0], &tv[i1], &tv[i2],
-                                r, g, b);
+                                colours[tri_index % 3].r, 
+                                colours[tri_index % 3].g, 
+                                colours[tri_index % 3].b
+        );
     }
 
     free(tv);
@@ -327,7 +323,19 @@ void Cleanup(SDL_Window *window, SDL_Renderer *renderer) {
     SDL_Quit();
 }
 
-void RenderText(SDL_Renderer *renderer, TTF_Font *font, const char *text, int x, int y) {
+Colour* SeedColourMap() {
+    srand(time(NULL));
+    Colour* colours = malloc(sizeof(Colour)*3);
+    for (int i = 0; i < 3; i++) {
+        colours[i].r = rand() % 256;
+        colours[i].g = rand() % 256;
+        colours[i].b = rand() % 256;
+    }
+
+    return colours;
+}
+
+void Render_Text(SDL_Renderer *renderer, TTF_Font *font, const char *text, int x, int y) {
     SDL_Color color = {255, 255, 255, 255}; // white
 
     SDL_Surface *surface = TTF_RenderText_Blended(font, text, color);
@@ -358,6 +366,8 @@ void Run_Window(char* filename) {
         return;
     }
     TTF_Font *font = TTF_OpenFont("/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 24); // linux default font location
+    
+    Colour *colours = SeedColourMap();
 
     Mesh mesh;
     mesh_init(&mesh);
@@ -408,22 +418,19 @@ void Run_Window(char* filename) {
         running = Camera_Controls(keyboard_state);
         
         // Render the frame
-        Render_Frame(renderer, &mesh);
+        Render_Frame(renderer, &mesh, colours);
 
         // Draw FPS on top
+
         char fpsText[32];
         snprintf(fpsText, sizeof(fpsText), "FPS: %.1f", currentFPS);
-        RenderText(renderer, font, fpsText, 10, 10);
-         
-        SDL_RenderPresent(renderer);
+        Render_Text(renderer, font, fpsText, 10, 10); 
 
+        SDL_RenderPresent(renderer);
         frameCount++;
         Uint32 currentTime = SDL_GetTicks();
         if (currentTime - fpsLastTime >= 1000) {
             currentFPS = frameCount / ((currentTime - fpsLastTime) / 1000.0f);
-            printf("FPS: %.1f\r", currentFPS);
-            fflush(stdout);
-            
             frameCount = 0;
             fpsLastTime = currentTime;
         }      
