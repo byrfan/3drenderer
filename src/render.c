@@ -2,6 +2,7 @@
 #include "dynarr.h"
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_ttf.h>
 #include <math.h>
 #include <stdio.h>
 
@@ -318,7 +319,6 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh) {
 
     free(tv);
 
-    SDL_RenderPresent(renderer);
 }
 
 void Cleanup(SDL_Window *window, SDL_Renderer *renderer) {
@@ -327,7 +327,24 @@ void Cleanup(SDL_Window *window, SDL_Renderer *renderer) {
     SDL_Quit();
 }
 
-void Run_Window() {
+void RenderText(SDL_Renderer *renderer, TTF_Font *font, const char *text, int x, int y) {
+    SDL_Color color = {255, 255, 255, 255}; // white
+
+    SDL_Surface *surface = TTF_RenderText_Blended(font, text, color);
+    if (!surface) return;
+
+    SDL_Texture *texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    if (!texture) return;
+
+    SDL_Rect dst = {x, y, 0, 0};
+    SDL_QueryTexture(texture, NULL, NULL, &dst.w, &dst.h);
+
+    SDL_RenderCopy(renderer, texture, NULL, &dst);
+    SDL_DestroyTexture(texture);
+}
+
+void Run_Window(char* filename) {
     SDL_Renderer *renderer = NULL;
     SDL_Window *window = NULL;
 
@@ -335,12 +352,16 @@ void Run_Window() {
         printf("Failed to initialise SDL!\n");
         return;
     }
+    if (TTF_Init() < 0) {
+        printf("SDL_ttf could not initialize! TTF_Error: %s\n", TTF_GetError());
+        SDL_Quit();
+        return;
+    }
+    TTF_Font *font = TTF_OpenFont("/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 24); // linux default font location
 
-    // Load the mesh from an OBJ file
     Mesh mesh;
     mesh_init(&mesh);
 
-    const char* filename = "Car.obj";  
     if (mesh_load_obj(&mesh, filename) != 0) {
         fprintf(stderr, "Failed to load mesh from %s\n", filename);
         Cleanup(window, renderer);
@@ -358,21 +379,60 @@ void Run_Window() {
         mesh.vertices[i].z *= scale;
     }
 
-    // Setup camera (optional, adjust as needed)
     Camera_SetPosition(0, 0, -300);
     Camera_SetFocalLength(500);
 
     const Uint8* keyboard_state = SDL_GetKeyboardState(NULL);
     int running = 1;
+    
+    // FPS management variables
+    Uint32 frameStart;
+    int frameTime;
+    const int targetFPS = 60;
+    const int frameDelay = 1000 / targetFPS;
+    
+    Uint32 fpsLastTime = SDL_GetTicks();
+    int frameCount = 0;
+    float currentFPS = 0;
 
     while (running) {
+        frameStart = SDL_GetTicks();
+        
+        // Handle events
         if (!Handle_Events()) {
             running = 0;
             break;
         }
+
+        // Update camera based on keyboard state
         running = Camera_Controls(keyboard_state);
+        
+        // Render the frame
         Render_Frame(renderer, &mesh);
-        SDL_Delay(16);  // ~60 FPS
+
+        // Draw FPS on top
+        char fpsText[32];
+        snprintf(fpsText, sizeof(fpsText), "FPS: %.1f", currentFPS);
+        RenderText(renderer, font, fpsText, 10, 10);
+         
+        SDL_RenderPresent(renderer);
+
+        frameCount++;
+        Uint32 currentTime = SDL_GetTicks();
+        if (currentTime - fpsLastTime >= 1000) {
+            currentFPS = frameCount / ((currentTime - fpsLastTime) / 1000.0f);
+            printf("FPS: %.1f\r", currentFPS);
+            fflush(stdout);
+            
+            frameCount = 0;
+            fpsLastTime = currentTime;
+        }      
+
+        frameTime = SDL_GetTicks() - frameStart;
+        if (frameDelay > frameTime) {
+            SDL_Delay(frameDelay - frameTime);
+        }
+
     }
 
     // Clean up mesh and SDL

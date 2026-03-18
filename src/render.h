@@ -14,6 +14,6 @@ typedef struct {
     float focal_length;
 } Camera;
 
-void Run_Window();
+void Run_Window(char* filename);
 
 #endif

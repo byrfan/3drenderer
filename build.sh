@@ -2,7 +2,7 @@
 
 CC="gcc"
 sdl_flags=$(pkg-config --cflags --libs sdl2)
-flags="-lm"
+flags="-lm -lSDL2_ttf"
 src="./src"
 bld="./build"
 exe="app"
