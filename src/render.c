@@ -185,6 +185,36 @@ static int edge_function(int x1, int y1, int x2, int y2, int x, int y) {
     return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
 }
 
+// Camera-space backface culling function
+int isTriangleFrontFacing(float x1, float y1, float z1,
+                          float x2, float y2, float z2,
+                          float x3, float y3, float z3) {
+    // Calculate two edges of the triangle
+    float e1x = x2 - x1;
+    float e1y = y2 - y1;
+    float e1z = z2 - z1;
+    
+    float e2x = x3 - x1;
+    float e2y = y3 - y1;
+    float e2z = z3 - z1;
+    
+    // Calculate normal (cross product)
+    float nx = e1y * e2z - e1z * e2y;
+    float ny = e1z * e2x - e1x * e2z;
+    float nz = e1x * e2y - e1y * e2x;
+    
+    // View direction in camera space (from triangle to camera at origin)
+    float vx = -x1;
+    float vy = -y1;
+    float vz = -z1;
+    
+    // Dot product of normal and view direction
+    float dot = nx * vx + ny * vy + nz * vz;
+    
+    // If dot > 0, normal points towards camera (front-facing)
+    return dot > 0;
+}
+
 void draw_triangle_projected(SDL_Renderer* renderer,
                              TransformedVertex* tv1,
                              TransformedVertex* tv2,
@@ -287,12 +317,8 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh, Colour* colours) {
         // Transform to camera space
         transform_to_camera(mesh->vertices[i].x, mesh->vertices[i].y, mesh->vertices[i].z,
                             &tv[i].cam_x, &tv[i].cam_y, &tv[i].cam_z);
-        // Project to screen
-        // TODO
-        // skip rendering triangles that are completely behind another triangle
-        // fix this in project to screen
         project_to_screen(tv[i].cam_x, tv[i].cam_y, tv[i].cam_z,
-                          &tv[i].sx, &tv[i].sy);
+                            &tv[i].sx, &tv[i].sy);
     }
     size_t tri_index; 
     for (size_t i = 0; i < num_indices; i += 3) {
@@ -301,8 +327,13 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh, Colour* colours) {
         size_t i2 = mesh->indices[i+2];
 
         
-        if (tv[i0].cam_z <= 0 || tv[i1].cam_z <= 0 || tv[i2].cam_z <= 0)
+        if (!isTriangleFrontFacing(
+                    tv[i0].cam_x, tv[i1].cam_x, tv[i2].cam_x, 
+                    tv[i0].cam_y, tv[i1].cam_y, tv[i2].cam_y, 
+                    tv[i0].cam_z, tv[i1].cam_z, tv[i2].cam_z)) {
             continue;
+        }
+
         size_t tri_index = i / 3;
 
         draw_triangle_projected(renderer,
@@ -365,6 +396,7 @@ void Run_Window(char* filename) {
         SDL_Quit();
         return;
     }
+
     TTF_Font *font = TTF_OpenFont("/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 24); // linux default font location
     
     Colour *colours = SeedColourMap();
@@ -419,8 +451,6 @@ void Run_Window(char* filename) {
         
         // Render the frame
         Render_Frame(renderer, &mesh, colours);
-
-        // Draw FPS on top
 
         char fpsText[32];
         snprintf(fpsText, sizeof(fpsText), "FPS: %.1f", currentFPS);
