@@ -1,9 +1,13 @@
 #include "mesh.h"
 #include "dynarr.h"
 #include "render.h"
+#include "console.h"
+#include "import.h"
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_stdinc.h>
 #include <SDL2/SDL_ttf.h>
+#include <iso646.h>
 #include <stdio.h>
 #include <math.h>
 #include <stdio.h>
@@ -12,6 +16,7 @@
 #define WIDTH 1280
 #define HEIGHT 720
 
+typedef Uint32 PixelBuffer;
 
 // Global camera instance
 static Camera camera = {
@@ -216,6 +221,7 @@ int isTriangleFrontFacing(float x1, float y1, float z1,
 }
 
 void draw_triangle_projected(SDL_Renderer* renderer,
+                             PixelBuffer *pixels, 
                              TransformedVertex* tv1,
                              TransformedVertex* tv2,
                              TransformedVertex* tv3,
@@ -244,6 +250,8 @@ void draw_triangle_projected(SDL_Renderer* renderer,
     // Double area of the triangle (used for barycentric weights)
     int area2 = edge_function(sx1, sy1, sx2, sy2, sx3, sy3);
     if (area2 == 0) return;
+    
+    Uint32 colour = (r << 24) | (g << 16) | (b << 8) | 0xFF;
 
     // Rasterize
     for (int y = min_y; y <= max_y; y++) {
@@ -267,8 +275,7 @@ void draw_triangle_projected(SDL_Renderer* renderer,
                 int idx = y * WIDTH + x;
                 if (z < depth_buffer[idx]) {
                     depth_buffer[idx] = z;
-                    SDL_SetRenderDrawColor(renderer, r, g, b, 255);
-                    SDL_RenderDrawPoint(renderer, x, y);
+                    pixels[idx] = colour;
                 }
             }
         }
@@ -299,7 +306,7 @@ int Handle_Events() {
     return 1;
 }
 
-void Render_Frame(SDL_Renderer *renderer, Mesh *mesh, Colour* colours) {
+void Render_Frame(SDL_Renderer *renderer, PixelBuffer *pixels, Mesh *mesh, Colour* colours) {
     // Clear colour buffer
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
@@ -308,6 +315,8 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh, Colour* colours) {
     for (int i = 0; i < WIDTH * HEIGHT; i++) {
         depth_buffer[i] = 1e10f;
     }
+
+    memset(pixels, 0, WIDTH * HEIGHT * sizeof(PixelBuffer));
 
     size_t num_indices = arr_len(mesh->indices);
     size_t num_vertices = arr_len(mesh->vertices);
@@ -325,18 +334,20 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh, Colour* colours) {
         size_t i0 = mesh->indices[i];
         size_t i1 = mesh->indices[i+1];
         size_t i2 = mesh->indices[i+2];
-
         
         if (!isTriangleFrontFacing(
-                    tv[i0].cam_x, tv[i1].cam_x, tv[i2].cam_x, 
-                    tv[i0].cam_y, tv[i1].cam_y, tv[i2].cam_y, 
-                    tv[i0].cam_z, tv[i1].cam_z, tv[i2].cam_z)) {
-            continue;
+            tv[i0].cam_x, tv[i1].cam_x, tv[i2].cam_x, 
+            tv[i0].cam_y, tv[i1].cam_y, tv[i2].cam_y, 
+            tv[i0].cam_z, tv[i1].cam_z, tv[i2].cam_z) or
+            (tv[i0].cam_z <= 0 || tv[i1].cam_z <= 0 || tv[i2].cam_z <= 0)) {
+                continue;
         }
+
 
         size_t tri_index = i / 3;
 
         draw_triangle_projected(renderer,
+                                pixels,
                                 &tv[i0], &tv[i1], &tv[i2],
                                 colours[tri_index % 3].r, 
                                 colours[tri_index % 3].g, 
@@ -346,6 +357,14 @@ void Render_Frame(SDL_Renderer *renderer, Mesh *mesh, Colour* colours) {
 
     free(tv);
 
+    SDL_Texture* texture = SDL_CreateTexture(renderer,
+        SDL_PIXELFORMAT_ARGB8888,
+        SDL_TEXTUREACCESS_STATIC,
+        WIDTH, HEIGHT);
+    
+    SDL_UpdateTexture(texture, NULL, pixels, WIDTH * sizeof(PixelBuffer));
+    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_DestroyTexture(texture);
 }
 
 void Cleanup(SDL_Window *window, SDL_Renderer *renderer) {
@@ -386,7 +405,7 @@ void Render_Text(SDL_Renderer *renderer, TTF_Font *font, const char *text, int x
 void Run_Window(char* filename) {
     SDL_Renderer *renderer = NULL;
     SDL_Window *window = NULL;
-
+    
     if (!Init_Window(&window, &renderer)) {
         printf("Failed to initialise SDL!\n");
         return;
@@ -397,6 +416,8 @@ void Run_Window(char* filename) {
         return;
     }
 
+    PixelBuffer pixels[WIDTH*HEIGHT];
+
     TTF_Font *font = TTF_OpenFont("/usr/share/fonts/liberation/LiberationMono-Regular.ttf", 24); // linux default font location
     
     Colour *colours = SeedColourMap();
@@ -404,7 +425,7 @@ void Run_Window(char* filename) {
     Mesh mesh;
     mesh_init(&mesh);
 
-    if (mesh_load_obj(&mesh, filename) != 0) {
+    if (load_obj(&mesh, filename) != 0) {
         fprintf(stderr, "Failed to load mesh from %s\n", filename);
         Cleanup(window, renderer);
         return;
@@ -436,7 +457,8 @@ void Run_Window(char* filename) {
     Uint32 fpsLastTime = SDL_GetTicks();
     int frameCount = 0;
     float currentFPS = 0;
-
+    
+    Console_Init();
     while (running) {
         frameStart = SDL_GetTicks();
         
@@ -446,11 +468,16 @@ void Run_Window(char* filename) {
             break;
         }
 
+        if (!Console_Update()) {
+            running = 0;
+            break;
+        }
+
         // Update camera based on keyboard state
         running = Camera_Controls(keyboard_state);
         
         // Render the frame
-        Render_Frame(renderer, &mesh, colours);
+        Render_Frame(renderer, pixels, &mesh, colours);
 
         char fpsText[32];
         snprintf(fpsText, sizeof(fpsText), "FPS: %.1f", currentFPS);
@@ -471,8 +498,7 @@ void Run_Window(char* filename) {
         }
 
     }
-
-    // Clean up mesh and SDL
+    Console_Cleanup();
     mesh_free(&mesh);
     Cleanup(window, renderer);
 }
