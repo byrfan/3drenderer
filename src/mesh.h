@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <string.h>
 
-#define LOCALISE_PATH(filename) strcat("/assets/", filename)
 
 typedef struct {
     float x,y,z;

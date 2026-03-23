@@ -4,6 +4,7 @@
 
 int main(int argc, char** argv) {
     char* filename = argv[1]; 
+
     Run_Window(filename);
 
     return 0;

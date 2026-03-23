@@ -33,7 +33,7 @@ typedef struct {
         (arr)[header->count++] = (x); \
     } while (0)
 
-#define arr_len(arr) ((Header*)(arr) - 1)->count
+#define arr_len(arr) ((arr) ? ((Header*)(arr) - 1)->count : 0)
 
 #define arr_free(arr) \
     do { \

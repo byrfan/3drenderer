@@ -1,5 +1,6 @@
 #include "console.h"
 #include "render.h"  // For camera functions
+#include "dynarr.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +14,66 @@ static int console_initialized = 0;
 static int exit_requested = 0;
 
 // Command handlers
+// Rotate mesh using pitch (X-axis) and yaw (Y-axis)
+
+void cmd_rotate_mesh(float pitch, float yaw, float roll) {
+    Mesh *mesh;
+    Mesh_GetInfo(&mesh);
+    
+    if (!mesh) {
+        printf("\n  Error: No mesh loaded!\n");
+        printf("> ");
+        fflush(stdout);
+        return;
+    }
+    
+    if (arr_len(mesh->vertices) == 0) {
+        printf("\n  Error: Mesh has no vertices!\n");
+        printf("> ");
+        fflush(stdout);
+        return;
+    }
+
+    // Convert to radians
+    float pitch_rad = pitch * M_PI / 180.0f;
+    float yaw_rad = yaw * M_PI / 180.0f;
+    float roll_rad = roll * M_PI / 180.0f;
+     
+    // Precompute trig values
+    float cp = cosf(pitch_rad), sp = sinf(pitch_rad);
+    float cy = cosf(yaw_rad), sy = sinf(yaw_rad);
+    float cr = cosf(roll_rad), sr = sinf(roll_rad);
+    
+    // Combined rotation matrix: Roll (Z) * Pitch (X) * Yaw (Y)
+    // Or whatever order you prefer. Here's ZYX order (roll, pitch, yaw)
+    float m00 = cy * cr + sy * sp * sr;
+    float m01 = -cy * sr + sy * sp * cr;
+    float m02 = sy * cp;
+    
+    float m10 = cp * sr;
+    float m11 = cp * cr;
+    float m12 = -sp;
+    
+    float m20 = -sy * cr + cy * sp * sr;
+    float m21 = sy * sr + cy * sp * cr;
+    float m22 = cy * cp;
+    
+    // Apply to all vertices
+    size_t vertex_count = arr_len(mesh->vertices);
+    for (size_t i = 0; i < vertex_count; i++) {
+        Vertex* v = &mesh->vertices[i];
+        float x = v->x, y = v->y, z = v->z;
+        
+        v->x = m00 * x + m01 * y + m02 * z;
+        v->y = m10 * x + m11 * y + m12 * z;
+        v->z = m20 * x + m21 * y + m22 * z;
+    }
+
+    printf("\n  Rotation set to pitch=%.2f, yaw=%.2f, roll=%.2f\n", pitch, yaw, roll);
+    printf("> ");
+    fflush(stdout);
+}
+
 static void cmd_teleport(float x, float y, float z) {
     Camera_SetPosition(x, y, z);
     printf("\n  Teleported to (%.1f, %.1f, %.1f)\n", x, y, z);
@@ -45,7 +106,7 @@ static void cmd_lookat(float x, float y, float z) {
     fflush(stdout);
 }
 
-static void cmd_rotate(float pitch, float yaw) {
+static void cmd_rotate_cam(float pitch, float yaw) {
     Camera_SetRotation(pitch, yaw);
     printf("\n  Rotation set to pitch=%.2f, yaw=%.2f\n", pitch, yaw);
     printf("> ");
@@ -64,11 +125,11 @@ static void cmd_info(void) {
 
 static void cmd_help(void) {
     printf("\n");
-    printf("Help.       (argument/s)    - (Information about command)\n");
     printf("  tp        (x, y, z)       - Teleport to coordinates\n");
     printf("  home      (none)          - Teleport to (0, 0, -300)\n");
     printf("  lookat    (x, y, z)       - Look at a point\n");
-    printf("  rot       (pitch, yaw)    - Set rotation\n");
+    printf("  rotcam    (pitch, yaw)    - Set rotation\n");
+    printf("  rotmesh   (pitch, yaw)    - Set rotation\n");
     printf("  info      (none)          - Show camera info\n");
     printf("  exit      (none)          - Exit the application\n");
     printf("  help      (none)          - Show this help\n");
@@ -89,7 +150,7 @@ static void process_command(char* line) {
     }
     
     // Parse command
-    float x, y, z, pitch, yaw;
+    float x, y, z, pitch, yaw, roll;
     
     if (sscanf(line, "tp %f %f %f", &x, &y, &z) == 3) {
         cmd_teleport(x, y, z);
@@ -100,8 +161,11 @@ static void process_command(char* line) {
     else if (sscanf(line, "lookat %f %f %f", &x, &y, &z) == 3) {
         cmd_lookat(x, y, z);
     }
-    else if (sscanf(line, "rot %f %f", &pitch, &yaw) == 2) {
-        cmd_rotate(pitch, yaw);
+    else if (sscanf(line, "rotcam %f %f", &pitch, &yaw) == 2) {
+        cmd_rotate_cam(pitch, yaw);
+    }
+    else if (sscanf(line, "rotmesh %f %f %f", &pitch, &yaw, &roll) == 3) {
+        cmd_rotate_mesh(pitch, yaw, roll);
     }
     else if (strcmp(line, "info") == 0) {
         cmd_info();
