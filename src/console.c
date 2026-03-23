@@ -125,14 +125,14 @@ static void cmd_info(void) {
 
 static void cmd_help(void) {
     printf("\n");
-    printf("  tp        (x, y, z)       - Teleport to coordinates\n");
-    printf("  home      (none)          - Teleport to (0, 0, -300)\n");
-    printf("  lookat    (x, y, z)       - Look at a point\n");
-    printf("  rotcam    (pitch, yaw)    - Set rotation\n");
-    printf("  rotmesh   (pitch, yaw)    - Set rotation\n");
-    printf("  info      (none)          - Show camera info\n");
-    printf("  exit      (none)          - Exit the application\n");
-    printf("  help      (none)          - Show this help\n");
+    printf("  tp        (x, y, z)           - Teleport to coordinates\n");
+    printf("  home      (none)              - Teleport to (0, 0, -300)\n");
+    printf("  lookat    (x, y, z)           - Look at a point\n");
+    printf("  rotcam    (pitch, yaw)        - Set rotation\n");
+    printf("  rotmesh   (pitch, yaw, roll)  - Set rotation\n");
+    printf("  info      (none)              - Show camera info\n");
+    printf("  exit      (none)              - Exit the application\n");
+    printf("  help      (none)              - Show this help\n");
     printf("  ===\n");
     printf("> ");
     fflush(stdout);
