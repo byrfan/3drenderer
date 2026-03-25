@@ -173,6 +173,14 @@ void Draw_Line(SDL_Renderer *renderer, Camera* cam, Vertex* v1, Vertex* v2) {
     }
 }
 
+void scale_vertices(Mesh* mesh, float scale) {
+    for (size_t i = 0; i < arr_len(mesh->vertices); i++) {
+        mesh->vertices[i].x *= scale;
+        mesh->vertices[i].y *= scale;
+        mesh->vertices[i].z *= scale;
+    }
+}
+
 static int edge_function(int x1, int y1, int x2, int y2, int x, int y) {
     return (x2 - x1) * (y - y1) - (y2 - y1) * (x - x1);
 }
@@ -408,18 +416,13 @@ void Run_Window(char* filename) {
 
     app.mesh = &mesh;
     app.camera = camera;
+    
+    scale_vertices(&mesh, 20);
 
     printf("Loaded %zu vertices, %zu indices (%zu triangles)\n",
            arr_len(mesh.vertices), arr_len(mesh.indices),
            arr_len(mesh.indices) / 3);
     
-    float scale = 20;
-    for (size_t i = 0; i < arr_len(mesh.vertices); i++) {
-        mesh.vertices[i].x *= scale;
-        mesh.vertices[i].y *= scale;
-        mesh.vertices[i].z *= scale;
-    }
-
     Camera_SetPosition(0, 0, -300);
     Camera_SetFocalLength(500);
 

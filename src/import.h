@@ -21,4 +21,8 @@ typedef struct __attribute__((packed)) {
 
 int load_mesh_from_file(Mesh* mesh, const char* filename);
 
+//TODO create helpers file
+const char* get_extension(const char* filename);
+int insensitive_strcmp(const char* a, const char* b);
+
 #endif

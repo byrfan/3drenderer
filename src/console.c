@@ -1,7 +1,9 @@
 #include "console.h"
+#include "export.h"
 #include "render.h"  // For camera functions
 #include "dynarr.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -74,6 +76,16 @@ void cmd_rotate_mesh(float pitch, float yaw, float roll) {
     fflush(stdout);
 }
 
+void cmd_export_mesh(const char* filename) {
+    Mesh *mesh;
+    Mesh_GetInfo(&mesh);
+    load_mesh_to_file(mesh, filename);     
+
+    printf("\nExported: %s\n", filename);
+    printf("> ");
+    fflush(stdout);
+}
+
 static void cmd_teleport(float x, float y, float z) {
     Camera_SetPosition(x, y, z);
     printf("\n  Teleported to (%.1f, %.1f, %.1f)\n", x, y, z);
@@ -131,6 +143,7 @@ static void cmd_help(void) {
     printf("  rotcam    (pitch, yaw)        - Set rotation\n");
     printf("  rotmesh   (pitch, yaw, roll)  - Set rotation\n");
     printf("  info      (none)              - Show camera info\n");
+    printf("  export    (filename)          - Export mesh to file\n");
     printf("  exit      (none)              - Exit the application\n");
     printf("  help      (none)              - Show this help\n");
     printf("  ===\n");
@@ -151,6 +164,7 @@ static void process_command(char* line) {
     
     // Parse command
     float x, y, z, pitch, yaw, roll;
+    char filename[64];
     
     if (sscanf(line, "tp %f %f %f", &x, &y, &z) == 3) {
         cmd_teleport(x, y, z);
@@ -166,6 +180,9 @@ static void process_command(char* line) {
     }
     else if (sscanf(line, "rotmesh %f %f %f", &pitch, &yaw, &roll) == 3) {
         cmd_rotate_mesh(pitch, yaw, roll);
+    }
+    else if (sscanf(line, "export %s", filename) == 1) {
+        cmd_export_mesh(filename);
     }
     else if (strcmp(line, "info") == 0) {
         cmd_info();

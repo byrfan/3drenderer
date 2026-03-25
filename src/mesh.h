@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct {
     Vertex* vertices;
-    size_t* indices;
+    int* indices;
 } Mesh;
 
 void mesh_init(Mesh* m);

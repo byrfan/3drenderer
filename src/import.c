@@ -324,13 +324,13 @@ int load_stl(Mesh* mesh, const char* filename) {
     }
 }
 
-static const char* get_extension(const char* filename) {
+const char* get_extension(const char* filename) {
     const char* dot = strrchr(filename, '.');
     if (!dot || dot == filename) return "";
     return dot + 1;
 }
 
-static int insensitive_strcmp(const char* a, const char* b) {
+int insensitive_strcmp(const char* a, const char* b) {
     while (*a && *b) {
         if (tolower(*a) != tolower(*b)) return 1;
         a++; b++;

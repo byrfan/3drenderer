@@ -35,5 +35,6 @@ void Camera_Rotate(float pitch_delta, float yaw_delta);
 void Camera_SetFocalLength(float focal_length);
 void Camera_GetInfo(Camera* out_camera);
 void Mesh_GetInfo(Mesh** out_mesh);
+void scale_vertices(Mesh* mesh, float scale);
 
 #endif

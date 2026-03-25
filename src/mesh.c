@@ -20,5 +20,3 @@ void mesh_add_vertex(Mesh* m, Vertex v) {
 void mesh_add_index(Mesh* m, int i) {
     arr_push(m->indices, i);
 }
-
-
