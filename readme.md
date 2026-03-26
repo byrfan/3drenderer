@@ -6,7 +6,8 @@ A Model render that takes in various file formats (to be decided)
         formats.
 
 TODO:
-    - Add export for filetypes
+
+    - Fix mess that is the function names and header format 
     - Add ray occulsion culling see if it benefits framerate
 
     - Add support for other file formats
